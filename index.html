@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>鑽石兌換計算器</title>
+    <style>
+      /* 完整CSS樣式 */
+      body {
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+        margin: 0;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+
+      .calculator {
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        width: 100%;
+        max-width: 500px;
+        overflow: hidden;
+      }
+
+      .header {
+        background: linear-gradient(to right, #6c5ce7, #a29bfe);
+        color: white;
+        padding: 20px;
+        text-align: center;
+      }
+
+      .header h2 {
+        font-weight: 600;
+        margin-bottom: 5px;
+      }
+
+      .content {
+        padding: 25px;
+      }
+
+      .form-group {
+        margin-bottom: 20px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        color: #343a40;
+        font-weight: 500;
+      }
+
+      select,
+      input {
+        width: 100%;
+        padding: 12px 15px;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        font-size: 16px;
+        transition: all 0.3s;
+      }
+
+      select:focus,
+      input:focus {
+        outline: none;
+        border-color: #6c5ce7;
+      }
+
+      button {
+        width: 100%;
+        padding: 14px;
+        background: linear-gradient(to right, #6c5ce7, #a29bfe);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+        box-shadow: 0 4px 15px rgba(108, 92, 231, 0.3);
+      }
+
+      button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(108, 92, 231, 0.4);
+      }
+
+      .result {
+        margin-top: 25px;
+        padding: 20px;
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        text-align: center;
+        display: none;
+      }
+
+      .result h3 {
+        color: #6c5ce7;
+        margin-bottom: 10px;
+      }
+
+      .diamond-count {
+        font-size: 28px;
+        font-weight: 700;
+        color: #00b894;
+        margin: 10px 0;
+      }
+
+      .rate-info {
+        color: #6c757d;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 完整HTML結構 -->
+    <div class="calculator">
+      <div class="header">
+        <h2>鑽石兌換計算器</h2>
+        <p>快速計算您的貨幣可兌換多少鑽石</p>
+      </div>
+
+      <div class="content">
+        <div class="form-group">
+          <label for="currency">選擇幣種</label>
+          <select id="currency" required>
+            <option value="">-- 請選擇幣種 --</option>
+            <option value="TWD">新台幣 (TWD) 1:2.857</option>
+            <option value="CNY">人民幣 (CNY) 1:12.5</option>
+            <option value="MYR">馬來西亞令吉 (MYR) 1:18.87</option>
+            <option value="SGD">新加坡幣 (SGD) 1:58.82</option>
+            <option value="HKD">港幣 (HKD) 1:11.11</option>
+            <option value="AUD">澳幣 (AUD) 1:54.05</option>
+            <option value="MOP">澳門幣 (MOP) 1:10</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="amount">輸入金額</label>
+          <input
+            type="number"
+            id="amount"
+            min="0"
+            step="0.01"
+            placeholder="輸入要兌換的金額"
+            required
+          />
+        </div>
+
+        <button id="calculate-btn">計算鑽石數量</button>
+
+        <div class="result" id="result">
+          <h3>兌換結果</h3>
+          <div id="original-amount"></div>
+          <div class="diamond-count" id="diamond-count"></div>
+          <div class="rate-info" id="rate-info"></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // 完整JavaScript功能
+      document.addEventListener("DOMContentLoaded", function () {
+        const currencySelect = document.getElementById("currency");
+        const amountInput = document.getElementById("amount");
+        const calculateBtn = document.getElementById("calculate-btn");
+        const resultDiv = document.getElementById("result");
+
+        // 匯率數據
+        const diamondRates = {
+          TWD: 2.857,
+          CNY: 12.5,
+          MYR: 18.87,
+          SGD: 58.82,
+          HKD: 11.11,
+          AUD: 54.05,
+          MOP: 10,
+        };
+
+        // 貨幣符號
+        const currencySymbols = {
+          TWD: "NT$",
+          CNY: "¥",
+          MYR: "RM",
+          SGD: "S$",
+          HKD: "HK$",
+          AUD: "A$",
+          MOP: "MOP$",
+        };
+
+        // 計算函數
+        function calculateDiamonds() {
+          const currency = currencySelect.value;
+          const amount = parseFloat(amountInput.value);
+
+          // 輸入驗證
+          if (!currency) {
+            alert("請選擇幣種");
+            return;
+          }
+
+          if (isNaN(amount) || amount <= 0) {
+            alert("請輸入有效金額（必須大於0）");
+            return;
+          }
+
+          // 計算鑽石
+          const diamonds = amount * diamondRates[currency];
+
+          // 顯示結果
+          document.getElementById(
+            "original-amount"
+          ).innerHTML = `您輸入: <strong>${
+            currencySymbols[currency]
+          }${amount.toLocaleString()}</strong>`;
+          document.getElementById(
+            "diamond-count"
+          ).textContent = `${diamonds.toFixed(2)} 鑽石`;
+          document.getElementById(
+            "rate-info"
+          ).textContent = `匯率: 1 ${currency} = ${diamondRates[currency]} 鑽石`;
+
+          resultDiv.style.display = "block";
+        }
+
+        // 事件監聽
+        calculateBtn.addEventListener("click", calculateDiamonds);
+
+        // 支援按Enter鍵計算
+        amountInput.addEventListener("keypress", function (e) {
+          if (e.key === "Enter") {
+            calculateDiamonds();
+          }
+        });
+      });
+    </script>
+  </body>
+</html>
