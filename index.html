@@ -55,158 +55,42 @@
         margin-top: 10px;
         font-weight: bold;
       }
-      #filters,
-      #filters2,
-      #filters3 {
+      #filters {
         margin: 10px 0;
-      }
-      select,
-      input[type="text"],
-      input[type="date"],
-      input[type="number"] {
-        padding: 5px;
-        font-size: 14px;
-        margin-left: 5px;
-        margin-right: 10px;
-      }
-      button {
-        padding: 5px 10px;
-        font-size: 14px;
-        cursor: pointer;
-      }
-      #repayList table {
-        max-height: 200px;
-        overflow-y: auto;
-        display: block;
       }
     </style>
   </head>
   <body>
-    <h2>Excel 上傳與分頁查詢</h2>
+    <h2>Excel 上傳 - 查詢與統計</h2>
     <input type="file" id="upload" accept=".xlsx, .xls" />
 
-    <div id="tabs">
-      <div class="tab active" data-page="entryPage">入帳紀錄</div>
-      <div class="tab" data-page="repayPage">回款紀錄</div>
-      <div class="tab" data-page="balancePage">餘額查詢</div>
+    <div id="filters">
+      <label>入帳方式：<input type="text" id="filterMethod" /></label>
+      <label>日期關鍵字：<input type="text" id="filterDate" /></label>
+      <button onclick="renderSeparateStats()">查詢</button>
     </div>
 
-    <!-- 入帳紀錄頁 -->
-    <div id="entryPage" class="page" style="display: block">
-      <div id="filters">
-        <label
-          >入帳方式：
-          <select id="filterMethodSelect">
-            <option value="">全部</option>
-          </select>
-        </label>
-        <label
-          >起始日期：
-          <input type="date" id="filterStartDate" />
-        </label>
-        <label
-          >結束日期：
-          <input type="date" id="filterEndDate" />
-        </label>
-        <button onclick="renderEntryStats()">查詢</button>
-      </div>
-      <div id="entryContent"></div>
-    </div>
-
-    <!-- 回款紀錄頁 -->
-    <div id="repayPage" class="page" style="display: none">
-      <div id="filters2">
-        <label
-          >回款日期：
-          <input type="date" id="repayDate" />
-        </label>
-        <label
-          >入帳方式：
-          <select id="repayMethodSelect">
-            <option value="">請先上傳檔案選擇入帳方式</option>
-          </select>
-        </label>
-        <label
-          >回款金額：
-          <input type="number" id="repayAmount" min="0" />
-        </label>
-        <button onclick="addRepayRecord()">新增回款</button>
-      </div>
-      <div id="repayList"></div>
-    </div>
-
-    <!-- 餘額查詢頁 -->
-    <div id="balancePage" class="page" style="display: none">
-      <div id="filters3">
-        <label
-          >入帳方式：
-          <select id="balanceMethodSelect">
-            <option value="">全部</option>
-          </select>
-        </label>
-        <label
-          >起始日期：
-          <input type="date" id="balanceStartDate" />
-        </label>
-        <label
-          >結束日期：
-          <input type="date" id="balanceEndDate" />
-        </label>
-        <button onclick="renderBalance()">查詢</button>
-      </div>
-      <div id="balanceResult"></div>
-    </div>
+    <div id="tabs"></div>
+    <div id="summaryTop" class="summary"></div>
+    <div id="content"></div>
 
     <script>
       let allData = [];
-      let repayData = [];
-
-      const filterMethodSelect = document.getElementById("filterMethodSelect");
-      const repayMethodSelect = document.getElementById("repayMethodSelect");
-      const balanceMethodSelect = document.getElementById(
-        "balanceMethodSelect"
-      );
-
-      // 分頁切換
-      const tabs = document.querySelectorAll("#tabs .tab");
-      const pages = document.querySelectorAll(".page");
-      tabs.forEach((tab) => {
-        tab.addEventListener("click", () => {
-          tabs.forEach((t) => t.classList.remove("active"));
-          pages.forEach((p) => (p.style.display = "none"));
-          tab.classList.add("active");
-          document.getElementById(tab.dataset.page).style.display = "block";
-        });
-      });
 
       document.getElementById("upload").addEventListener("change", handleFile);
 
       function formatExcelTime(value) {
         if (typeof value === "number") {
           let date = XLSX.SSF.parse_date_code(value);
-          return `${date.y}-${String(date.m).padStart(2, "0")}-${String(
+          return ${date.y}-${String(date.m).padStart(2, "0")}-${String(
             date.d
-          ).padStart(2, "0")}`;
+          ).padStart(2, "0")};
         }
         return value || "";
       }
 
-      function parseDateFromFilename(filename) {
-        const match = filename.match(/(\d{6})/);
-        if (match) {
-          const raw = match[1];
-          const year = "20" + raw.substring(0, 2);
-          const month = raw.substring(2, 4);
-          const day = raw.substring(4, 6);
-          return `${year}-${month}-${day}`;
-        }
-        return "";
-      }
-
-      // 讀 Excel
       function handleFile(e) {
         const file = e.target.files[0];
-        const parsedDate = parseDateFromFilename(file.name);
         const reader = new FileReader();
         reader.onload = function (event) {
           const data = new Uint8Array(event.target.result);
@@ -218,78 +102,35 @@
             const row = rows[i];
             if (!row[1]) continue;
             allData.push({
-              date: parsedDate || formatExcelTime(row[1]),
+              date: formatExcelTime(row[1]),
               agent: row[2] || "",
               idName: row[3] || "",
               diamond: row[5] || 0,
               method: row[6] || "無入帳方式",
               lastCode: row[7] || "",
-              amount: Number(row[8]) || 0,
+              amount: row[8] || 0,
               note: row[9] || "",
             });
           }
-          populateMethodSelects();
-          renderEntryStats();
-          renderRepayList();
+          renderSeparateStats();
         };
         reader.readAsArrayBuffer(file);
       }
 
-      // 填入帳方式下拉
-      function populateMethodSelects() {
-        const methods = Array.from(
-          new Set(allData.map((d) => d.method))
-        ).sort();
-        // 入帳頁
-        filterMethodSelect.innerHTML = '<option value="">全部</option>';
-        // 回款頁
-        repayMethodSelect.innerHTML = '<option value="">全部</option>';
-        // 餘額頁
-        balanceMethodSelect.innerHTML = '<option value="">全部</option>';
-
-        methods.forEach((method) => {
-          const option1 = document.createElement("option");
-          option1.value = method;
-          option1.textContent = method;
-          filterMethodSelect.appendChild(option1);
-
-          const option2 = document.createElement("option");
-          option2.value = method;
-          option2.textContent = method;
-          repayMethodSelect.appendChild(option2);
-
-          const option3 = document.createElement("option");
-          option3.value = method;
-          option3.textContent = method;
-          balanceMethodSelect.appendChild(option3);
-        });
-      }
-
-      // 第一頁：入帳紀錄（含小計）
-      function renderEntryStats() {
-        const methodFilter = filterMethodSelect.value;
-        const startDate = document.getElementById("filterStartDate").value;
-        const endDate = document.getElementById("filterEndDate").value;
+      function renderSeparateStats() {
+        const methodFilter = document
+          .getElementById("filterMethod")
+          .value.trim();
+        const dateFilter = document.getElementById("filterDate").value.trim();
 
         const filtered = allData.filter((item) => {
-          const matchesMethod = !methodFilter || item.method === methodFilter;
-          const d = item.date;
-          const matchesStart = !startDate || d >= startDate;
-          const matchesEnd = !endDate || d <= endDate;
-          return matchesMethod && matchesStart && matchesEnd;
+          const matchesMethod =
+            methodFilter === "" || item.method.includes(methodFilter);
+          const matchesDate =
+            dateFilter === "" || item.date.includes(dateFilter);
+          return matchesMethod && matchesDate;
         });
 
-        let totalAmount = 0;
-        filtered.forEach((item) => (totalAmount += Number(item.amount) || 0));
-
-        let html = `<div class="summary">
-        <div>篩選條件 - 入帳方式: <b>${methodFilter || "全部"}</b>，日期: <b>${
-          startDate || "不限"
-        } 至 ${endDate || "不限"}</b></div>
-        <div>入帳總金額：<b>${totalAmount.toLocaleString()}</b></div>
-      </div>`;
-
-        // 分組
         const grouped = {};
         filtered.forEach((item) => {
           const key = item.method || "無入帳方式";
@@ -297,137 +138,25 @@
           grouped[key].push(item);
         });
 
+        let html = "";
         for (const method in grouped) {
-          const group = grouped[method];
-          // 小計
-          const subTotalDiamond = group.reduce(
-            (acc, cur) => acc + (Number(cur.diamond) || 0),
-            0
-          );
-          const subTotalAmount = group.reduce(
-            (acc, cur) => acc + (Number(cur.amount) || 0),
-            0
-          );
+          html += <div class="group-title">入帳方式：${method}</div>;
+          html += <table><thead><tr><th>日期</th><th>業務員</th><th>ID/名字</th><th>鑽石</th><th>末碼</th><th>金額</th><th>備註</th></tr></thead><tbody>;
 
-          html += `<div class="group-title">入帳方式：${method} - 小計 鑽石：${subTotalDiamond.toLocaleString()}，金額：${subTotalAmount.toLocaleString()}</div>`;
-          html += `<table><thead>
-          <tr>
-            <th>日期</th><th>業務員</th><th>ID/名字</th><th>鑽石數</th><th>入帳方式</th><th>末碼</th><th>金額</th><th>備註</th>
-          </tr></thead><tbody>`;
-          group.forEach((row) => {
-            html += `<tr>
-            <td>${row.date}</td>
-            <td>${row.agent}</td>
-            <td>${row.idName}</td>
-            <td>${Number(row.diamond).toLocaleString()}</td>
-            <td>${row.method}</td>
-            <td>${row.lastCode}</td>
-            <td>${Number(row.amount).toLocaleString()}</td>
-            <td>${row.note}</td>
-          </tr>`;
+          let sumAmt = 0;
+          let sumDiamond = 0;
+
+          grouped[method].forEach((item) => {
+            html += <tr><td>${item.date}</td><td>${item.agent}</td><td>${item.idName}</td><td>${item.diamond}</td><td>${item.lastCode}</td><td>${item.amount}</td><td>${item.note}</td></tr>;
+            sumAmt += Number(item.amount) || 0;
+            sumDiamond += Number(item.diamond) || 0;
           });
-          html += `</tbody></table>`;
+
+          html += <tr style="font-weight:bold; background:#fafafa;"><td colspan="3">小計</td><td>${sumDiamond.toLocaleString()}</td><td></td><td>${sumAmt.toLocaleString()}</td><td></td></tr>;
+          html += </tbody></table>;
         }
-        document.getElementById("entryContent").innerHTML = html;
-      }
 
-      // 第二頁：回款紀錄操作與顯示
-      function addRepayRecord() {
-        const repayDate = document.getElementById("repayDate").value;
-        const repayMethod = repayMethodSelect.value;
-        const repayAmount = Number(
-          document.getElementById("repayAmount").value
-        );
-
-        if (!repayDate) {
-          alert("請選擇回款日期");
-          return;
-        }
-        if (!repayMethod) {
-          alert("請選擇入帳方式");
-          return;
-        }
-        if (!repayAmount || repayAmount <= 0) {
-          alert("請輸入正確的回款金額");
-          return;
-        }
-        repayData.push({
-          date: repayDate,
-          method: repayMethod,
-          amount: repayAmount,
-        });
-        document.getElementById("repayDate").value = "";
-        document.getElementById("repayAmount").value = "";
-        renderRepayList();
-      }
-
-      function renderRepayList() {
-        if (repayData.length === 0) {
-          document.getElementById("repayList").innerHTML =
-            "<p>尚無回款紀錄</p>";
-          return;
-        }
-        // 按日期排序
-        repayData.sort((a, b) => a.date.localeCompare(b.date));
-
-        let html = `<table>
-        <thead>
-          <tr><th>回款日期</th><th>入帳方式</th><th>回款金額</th></tr>
-        </thead>
-        <tbody>`;
-        repayData.forEach((row) => {
-          html += `<tr>
-          <td>${row.date}</td>
-          <td>${row.method}</td>
-          <td>${row.amount.toLocaleString()}</td>
-        </tr>`;
-        });
-        html += `</tbody></table>`;
-        document.getElementById("repayList").innerHTML = html;
-      }
-
-      // 第三頁：餘額查詢
-      function renderBalance() {
-        const methodFilter = balanceMethodSelect.value;
-        const startDate = document.getElementById("balanceStartDate").value;
-        const endDate = document.getElementById("balanceEndDate").value;
-
-        // 篩選入帳
-        const filteredEntry = allData.filter((item) => {
-          const matchesMethod = !methodFilter || item.method === methodFilter;
-          const d = item.date;
-          const matchesStart = !startDate || d >= startDate;
-          const matchesEnd = !endDate || d <= endDate;
-          return matchesMethod && matchesStart && matchesEnd;
-        });
-        // 篩選回款
-        const filteredRepay = repayData.filter((item) => {
-          const matchesMethod = !methodFilter || item.method === methodFilter;
-          const d = item.date;
-          const matchesStart = !startDate || d >= startDate;
-          const matchesEnd = !endDate || d <= endDate;
-          return matchesMethod && matchesStart && matchesEnd;
-        });
-
-        const totalEntry = filteredEntry.reduce(
-          (acc, cur) => acc + (Number(cur.amount) || 0),
-          0
-        );
-        const totalRepay = filteredRepay.reduce(
-          (acc, cur) => acc + (Number(cur.amount) || 0),
-          0
-        );
-        const diff = totalEntry - totalRepay;
-
-        let html = `<div class="summary">
-        <div>篩選條件 - 入帳方式: <b>${methodFilter || "全部"}</b>，日期: <b>${
-          startDate || "不限"
-        } 至 ${endDate || "不限"}</b></div>
-        <div>入帳總金額：<b>${totalEntry.toLocaleString()}</b></div>
-        <div>回款總金額：<b>${totalRepay.toLocaleString()}</b></div>
-        <div>差額（入帳 - 回款）：<b>${diff.toLocaleString()}</b></div>
-      </div>`;
-        document.getElementById("balanceResult").innerHTML = html;
+        document.getElementById("content").innerHTML = html;
       }
     </script>
   </body>
