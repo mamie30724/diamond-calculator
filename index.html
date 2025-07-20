@@ -2,240 +2,433 @@
 <html lang="zh-TW">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>鑽石兌換計算器</title>
+    <title>Excel 上傳與分頁查詢</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-      /* 完整CSS樣式 */
       body {
-        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-        min-height: 100vh;
+        font-family: Arial, sans-serif;
+        margin: 1em;
+      }
+      #tabs {
+        margin-top: 1em;
+        border-bottom: 2px solid #444;
         display: flex;
-        justify-content: center;
-        align-items: center;
-        padding: 20px;
-        margin: 0;
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        gap: 8px;
+        flex-wrap: wrap;
       }
-
-      .calculator {
+      .tab {
+        padding: 8px 16px;
+        cursor: pointer;
+        border: 1px solid #aaa;
+        border-bottom: none;
+        background: #eee;
+        user-select: none;
+        white-space: nowrap;
+      }
+      .tab.active {
         background: white;
-        border-radius: 15px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        border-color: #444 #444 white;
+        font-weight: bold;
+      }
+      .group-title {
+        margin: 20px 0 6px 0;
+        font-weight: bold;
+        font-size: 1.1em;
+        border-bottom: 1px solid #ccc;
+        padding-bottom: 4px;
+      }
+      table {
+        border-collapse: collapse;
         width: 100%;
-        max-width: 500px;
-        overflow: hidden;
-      }
-
-      .header {
-        background: linear-gradient(to right, #6c5ce7, #a29bfe);
-        color: white;
-        padding: 20px;
-        text-align: center;
-      }
-
-      .header h2 {
-        font-weight: 600;
-        margin-bottom: 5px;
-      }
-
-      .content {
-        padding: 25px;
-      }
-
-      .form-group {
         margin-bottom: 20px;
       }
-
-      label {
-        display: block;
-        margin-bottom: 8px;
-        color: #343a40;
-        font-weight: 500;
-      }
-
-      select,
-      input {
-        width: 100%;
-        padding: 12px 15px;
-        border: 2px solid #e0e0e0;
-        border-radius: 8px;
-        font-size: 16px;
-        transition: all 0.3s;
-      }
-
-      select:focus,
-      input:focus {
-        outline: none;
-        border-color: #6c5ce7;
-      }
-
-      button {
-        width: 100%;
-        padding: 14px;
-        background: linear-gradient(to right, #6c5ce7, #a29bfe);
-        color: white;
-        border: none;
-        border-radius: 8px;
-        font-size: 16px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.3s;
-        box-shadow: 0 4px 15px rgba(108, 92, 231, 0.3);
-      }
-
-      button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(108, 92, 231, 0.4);
-      }
-
-      .result {
-        margin-top: 25px;
-        padding: 20px;
-        background-color: #f8f9fa;
-        border-radius: 10px;
+      th,
+      td {
+        border: 1px solid #aaa;
+        padding: 6px 10px;
         text-align: center;
-        display: none;
       }
-
-      .result h3 {
-        color: #6c5ce7;
-        margin-bottom: 10px;
+      th {
+        background-color: #f0f0f0;
       }
-
-      .diamond-count {
-        font-size: 28px;
-        font-weight: 700;
-        color: #00b894;
+      .summary {
+        margin-top: 10px;
+        font-weight: bold;
+      }
+      #filters,
+      #filters2,
+      #filters3 {
         margin: 10px 0;
       }
-
-      .rate-info {
-        color: #6c757d;
+      select,
+      input[type="text"],
+      input[type="date"],
+      input[type="number"] {
+        padding: 5px;
         font-size: 14px;
+        margin-left: 5px;
+        margin-right: 10px;
+      }
+      button {
+        padding: 5px 10px;
+        font-size: 14px;
+        cursor: pointer;
+      }
+      #repayList table {
+        max-height: 200px;
+        overflow-y: auto;
+        display: block;
       }
     </style>
   </head>
   <body>
-    <!-- 完整HTML結構 -->
-    <div class="calculator">
-      <div class="header">
-        <h2>鑽石兌換計算器</h2>
-        <p>快速計算您的貨幣可兌換多少鑽石</p>
-      </div>
+    <h2>Excel 上傳與分頁查詢</h2>
+    <input type="file" id="upload" accept=".xlsx, .xls" />
 
-      <div class="content">
-        <div class="form-group">
-          <label for="currency">選擇幣種</label>
-          <select id="currency" required>
-            <option value="">-- 請選擇幣種 --</option>
-            <option value="TWD">新台幣 (TWD) 1:2.857</option>
-            <option value="CNY">人民幣 (CNY) 1:12.5</option>
-            <option value="MYR">馬來西亞令吉 (MYR) 1:18.87</option>
-            <option value="SGD">新加坡幣 (SGD) 1:58.82</option>
-            <option value="HKD">港幣 (HKD) 1:11.11</option>
-            <option value="AUD">澳幣 (AUD) 1:54.05</option>
-            <option value="MOP">澳門幣 (MOP) 1:10</option>
+    <div id="tabs">
+      <div class="tab active" data-page="entryPage">入帳紀錄</div>
+      <div class="tab" data-page="repayPage">回款紀錄</div>
+      <div class="tab" data-page="balancePage">餘額查詢</div>
+    </div>
+
+    <!-- 入帳紀錄頁 -->
+    <div id="entryPage" class="page" style="display: block">
+      <div id="filters">
+        <label
+          >入帳方式：
+          <select id="filterMethodSelect">
+            <option value="">全部</option>
           </select>
-        </div>
-
-        <div class="form-group">
-          <label for="amount">輸入金額</label>
-          <input
-            type="number"
-            id="amount"
-            min="0"
-            step="100"
-            placeholder="輸入要兌換的金額"
-            required
-          />
-        </div>
-
-        <button id="calculate-btn">計算鑽石數量</button>
-
-        <div class="result" id="result">
-          <h3>兌換結果</h3>
-          <div id="original-amount"></div>
-          <div class="diamond-count" id="diamond-count"></div>
-          <div class="rate-info" id="rate-info"></div>
-        </div>
+        </label>
+        <label
+          >起始日期：
+          <input type="date" id="filterStartDate" />
+        </label>
+        <label
+          >結束日期：
+          <input type="date" id="filterEndDate" />
+        </label>
+        <button onclick="renderEntryStats()">查詢</button>
       </div>
+      <div id="entryContent"></div>
+    </div>
+
+    <!-- 回款紀錄頁 -->
+    <div id="repayPage" class="page" style="display: none">
+      <div id="filters2">
+        <label
+          >回款日期：
+          <input type="date" id="repayDate" />
+        </label>
+        <label
+          >入帳方式：
+          <select id="repayMethodSelect">
+            <option value="">請先上傳檔案選擇入帳方式</option>
+          </select>
+        </label>
+        <label
+          >回款金額：
+          <input type="number" id="repayAmount" min="0" />
+        </label>
+        <button onclick="addRepayRecord()">新增回款</button>
+      </div>
+      <div id="repayList"></div>
+    </div>
+
+    <!-- 餘額查詢頁 -->
+    <div id="balancePage" class="page" style="display: none">
+      <div id="filters3">
+        <label
+          >入帳方式：
+          <select id="balanceMethodSelect">
+            <option value="">全部</option>
+          </select>
+        </label>
+        <label
+          >起始日期：
+          <input type="date" id="balanceStartDate" />
+        </label>
+        <label
+          >結束日期：
+          <input type="date" id="balanceEndDate" />
+        </label>
+        <button onclick="renderBalance()">查詢</button>
+      </div>
+      <div id="balanceResult"></div>
     </div>
 
     <script>
-      // 完整JavaScript功能
-      document.addEventListener("DOMContentLoaded", function () {
-        const currencySelect = document.getElementById("currency");
-        const amountInput = document.getElementById("amount");
-        const calculateBtn = document.getElementById("calculate-btn");
-        const resultDiv = document.getElementById("result");
+      let allData = [];
+      let repayData = [];
 
-        // 匯率數據
-        const diamondRates = {
-          TWD: 2.857,
-          CNY: 12.5,
-          MYR: 18.87,
-          SGD: 58.82,
-          HKD: 11.11,
-          AUD: 54.05,
-          MOP: 10,
-        };
+      const filterMethodSelect = document.getElementById("filterMethodSelect");
+      const repayMethodSelect = document.getElementById("repayMethodSelect");
+      const balanceMethodSelect = document.getElementById(
+        "balanceMethodSelect"
+      );
 
-        // 貨幣符號
-        const currencySymbols = {
-          TWD: "NT$",
-          CNY: "¥",
-          MYR: "RM",
-          SGD: "S$",
-          HKD: "HK$",
-          AUD: "A$",
-          MOP: "MOP$",
-        };
-
-        // 計算函數
-        function calculateDiamonds() {
-          const currency = currencySelect.value;
-          const amount = parseFloat(amountInput.value);
-
-          // 輸入驗證
-          if (!currency) {
-            alert("請選擇幣種");
-            return;
-          }
-
-          if (isNaN(amount) || amount <= 0) {
-            alert("請輸入有效金額（必須大於0）");
-            return;
-          }
-
-          // 計算鑽石
-          const diamonds = amount * diamondRates[currency];
-
-          // 顯示結果
-          document.getElementById(
-            "original-amount"
-          ).innerHTML = `您輸入: <strong>${
-            currencySymbols[currency]
-          }${amount.toLocaleString()}</strong>`;
-          document.getElementById(
-            "diamond-count"
-          ).textContent = `${diamonds.toFixed(2)} 鑽石`;
-          document.getElementById(
-            "rate-info"
-          ).textContent = `匯率: 1 ${currency} = ${diamondRates[currency]} 鑽石`;
-
-          resultDiv.style.display = "block";
-        }
-
-        // 事件監聽
-        calculateBtn.addEventListener("click", calculateDiamonds);
-
-        // 支援按Enter鍵計算
-        amountInput.addEventListener("keypress", function (e) {
-          if (e.key === "Enter") {
-            calculateDiamonds();
-          }
+      // 分頁切換
+      const tabs = document.querySelectorAll("#tabs .tab");
+      const pages = document.querySelectorAll(".page");
+      tabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+          tabs.forEach((t) => t.classList.remove("active"));
+          pages.forEach((p) => (p.style.display = "none"));
+          tab.classList.add("active");
+          document.getElementById(tab.dataset.page).style.display = "block";
         });
       });
+
+      document.getElementById("upload").addEventListener("change", handleFile);
+
+      function formatExcelTime(value) {
+        if (typeof value === "number") {
+          let date = XLSX.SSF.parse_date_code(value);
+          return `${date.y}-${String(date.m).padStart(2, "0")}-${String(
+            date.d
+          ).padStart(2, "0")}`;
+        }
+        return value || "";
+      }
+
+      function parseDateFromFilename(filename) {
+        const match = filename.match(/(\d{6})/);
+        if (match) {
+          const raw = match[1];
+          const year = "20" + raw.substring(0, 2);
+          const month = raw.substring(2, 4);
+          const day = raw.substring(4, 6);
+          return `${year}-${month}-${day}`;
+        }
+        return "";
+      }
+
+      // 讀 Excel
+      function handleFile(e) {
+        const file = e.target.files[0];
+        const parsedDate = parseDateFromFilename(file.name);
+        const reader = new FileReader();
+        reader.onload = function (event) {
+          const data = new Uint8Array(event.target.result);
+          const workbook = XLSX.read(data, { type: "array" });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+          allData = [];
+          for (let i = 6; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row[1]) continue;
+            allData.push({
+              date: parsedDate || formatExcelTime(row[1]),
+              agent: row[2] || "",
+              idName: row[3] || "",
+              diamond: row[5] || 0,
+              method: row[6] || "無入帳方式",
+              lastCode: row[7] || "",
+              amount: Number(row[8]) || 0,
+              note: row[9] || "",
+            });
+          }
+          populateMethodSelects();
+          renderEntryStats();
+          renderRepayList();
+        };
+        reader.readAsArrayBuffer(file);
+      }
+
+      // 填入帳方式下拉
+      function populateMethodSelects() {
+        const methods = Array.from(
+          new Set(allData.map((d) => d.method))
+        ).sort();
+        // 入帳頁
+        filterMethodSelect.innerHTML = '<option value="">全部</option>';
+        // 回款頁
+        repayMethodSelect.innerHTML = '<option value="">全部</option>';
+        // 餘額頁
+        balanceMethodSelect.innerHTML = '<option value="">全部</option>';
+
+        methods.forEach((method) => {
+          const option1 = document.createElement("option");
+          option1.value = method;
+          option1.textContent = method;
+          filterMethodSelect.appendChild(option1);
+
+          const option2 = document.createElement("option");
+          option2.value = method;
+          option2.textContent = method;
+          repayMethodSelect.appendChild(option2);
+
+          const option3 = document.createElement("option");
+          option3.value = method;
+          option3.textContent = method;
+          balanceMethodSelect.appendChild(option3);
+        });
+      }
+
+      // 第一頁：入帳紀錄（含小計）
+      function renderEntryStats() {
+        const methodFilter = filterMethodSelect.value;
+        const startDate = document.getElementById("filterStartDate").value;
+        const endDate = document.getElementById("filterEndDate").value;
+
+        const filtered = allData.filter((item) => {
+          const matchesMethod = !methodFilter || item.method === methodFilter;
+          const d = item.date;
+          const matchesStart = !startDate || d >= startDate;
+          const matchesEnd = !endDate || d <= endDate;
+          return matchesMethod && matchesStart && matchesEnd;
+        });
+
+        let totalAmount = 0;
+        filtered.forEach((item) => (totalAmount += Number(item.amount) || 0));
+
+        let html = `<div class="summary">
+        <div>篩選條件 - 入帳方式: <b>${methodFilter || "全部"}</b>，日期: <b>${
+          startDate || "不限"
+        } 至 ${endDate || "不限"}</b></div>
+        <div>入帳總金額：<b>${totalAmount.toLocaleString()}</b></div>
+      </div>`;
+
+        // 分組
+        const grouped = {};
+        filtered.forEach((item) => {
+          const key = item.method || "無入帳方式";
+          if (!grouped[key]) grouped[key] = [];
+          grouped[key].push(item);
+        });
+
+        for (const method in grouped) {
+          const group = grouped[method];
+          // 小計
+          const subTotalDiamond = group.reduce(
+            (acc, cur) => acc + (Number(cur.diamond) || 0),
+            0
+          );
+          const subTotalAmount = group.reduce(
+            (acc, cur) => acc + (Number(cur.amount) || 0),
+            0
+          );
+
+          html += `<div class="group-title">入帳方式：${method} - 小計 鑽石：${subTotalDiamond.toLocaleString()}，金額：${subTotalAmount.toLocaleString()}</div>`;
+          html += `<table><thead>
+          <tr>
+            <th>日期</th><th>業務員</th><th>ID/名字</th><th>鑽石數</th><th>入帳方式</th><th>末碼</th><th>金額</th><th>備註</th>
+          </tr></thead><tbody>`;
+          group.forEach((row) => {
+            html += `<tr>
+            <td>${row.date}</td>
+            <td>${row.agent}</td>
+            <td>${row.idName}</td>
+            <td>${Number(row.diamond).toLocaleString()}</td>
+            <td>${row.method}</td>
+            <td>${row.lastCode}</td>
+            <td>${Number(row.amount).toLocaleString()}</td>
+            <td>${row.note}</td>
+          </tr>`;
+          });
+          html += `</tbody></table>`;
+        }
+        document.getElementById("entryContent").innerHTML = html;
+      }
+
+      // 第二頁：回款紀錄操作與顯示
+      function addRepayRecord() {
+        const repayDate = document.getElementById("repayDate").value;
+        const repayMethod = repayMethodSelect.value;
+        const repayAmount = Number(
+          document.getElementById("repayAmount").value
+        );
+
+        if (!repayDate) {
+          alert("請選擇回款日期");
+          return;
+        }
+        if (!repayMethod) {
+          alert("請選擇入帳方式");
+          return;
+        }
+        if (!repayAmount || repayAmount <= 0) {
+          alert("請輸入正確的回款金額");
+          return;
+        }
+        repayData.push({
+          date: repayDate,
+          method: repayMethod,
+          amount: repayAmount,
+        });
+        document.getElementById("repayDate").value = "";
+        document.getElementById("repayAmount").value = "";
+        renderRepayList();
+      }
+
+      function renderRepayList() {
+        if (repayData.length === 0) {
+          document.getElementById("repayList").innerHTML =
+            "<p>尚無回款紀錄</p>";
+          return;
+        }
+        // 按日期排序
+        repayData.sort((a, b) => a.date.localeCompare(b.date));
+
+        let html = `<table>
+        <thead>
+          <tr><th>回款日期</th><th>入帳方式</th><th>回款金額</th></tr>
+        </thead>
+        <tbody>`;
+        repayData.forEach((row) => {
+          html += `<tr>
+          <td>${row.date}</td>
+          <td>${row.method}</td>
+          <td>${row.amount.toLocaleString()}</td>
+        </tr>`;
+        });
+        html += `</tbody></table>`;
+        document.getElementById("repayList").innerHTML = html;
+      }
+
+      // 第三頁：餘額查詢
+      function renderBalance() {
+        const methodFilter = balanceMethodSelect.value;
+        const startDate = document.getElementById("balanceStartDate").value;
+        const endDate = document.getElementById("balanceEndDate").value;
+
+        // 篩選入帳
+        const filteredEntry = allData.filter((item) => {
+          const matchesMethod = !methodFilter || item.method === methodFilter;
+          const d = item.date;
+          const matchesStart = !startDate || d >= startDate;
+          const matchesEnd = !endDate || d <= endDate;
+          return matchesMethod && matchesStart && matchesEnd;
+        });
+        // 篩選回款
+        const filteredRepay = repayData.filter((item) => {
+          const matchesMethod = !methodFilter || item.method === methodFilter;
+          const d = item.date;
+          const matchesStart = !startDate || d >= startDate;
+          const matchesEnd = !endDate || d <= endDate;
+          return matchesMethod && matchesStart && matchesEnd;
+        });
+
+        const totalEntry = filteredEntry.reduce(
+          (acc, cur) => acc + (Number(cur.amount) || 0),
+          0
+        );
+        const totalRepay = filteredRepay.reduce(
+          (acc, cur) => acc + (Number(cur.amount) || 0),
+          0
+        );
+        const diff = totalEntry - totalRepay;
+
+        let html = `<div class="summary">
+        <div>篩選條件 - 入帳方式: <b>${methodFilter || "全部"}</b>，日期: <b>${
+          startDate || "不限"
+        } 至 ${endDate || "不限"}</b></div>
+        <div>入帳總金額：<b>${totalEntry.toLocaleString()}</b></div>
+        <div>回款總金額：<b>${totalRepay.toLocaleString()}</b></div>
+        <div>差額（入帳 - 回款）：<b>${diff.toLocaleString()}</b></div>
+      </div>`;
+        document.getElementById("balanceResult").innerHTML = html;
+      }
     </script>
   </body>
 </html>
