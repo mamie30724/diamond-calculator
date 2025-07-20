@@ -1,66 +1,80 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8" />
-  <title>Excel 檔案預覽</title>
+  <meta charset="UTF-8">
+  <title>匯入日報表資料</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; }
+    body { font-family: sans-serif; padding: 20px; }
     table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-    th, td { border: 1px solid #999; padding: 8px; text-align: left; }
-    th { background-color: #f2f2f2; }
-    #dateDisplay { font-size: 18px; margin-top: 10px; color: #333; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #f0f0f0; }
   </style>
 </head>
 <body>
-  <h2>上傳 Excel 並預覽內容</h2>
-  <input type="file" id="upload" accept=".xlsx" />
-  <div id="dateDisplay"></div>
-  <div id="excelData"></div>
+  <h2>上傳 Excel 檔案並解析日期</h2>
+  <input type="file" id="excelFile" accept=".xlsx" />
+
+  <table id="resultTable">
+    <thead>
+      <tr>
+        <th>時間</th>
+        <th>業務員</th>
+        <th>ID/名字</th>
+        <th>出款鑽石</th>
+        <th>入帳方式</th>
+        <th>入帳末碼</th>
+        <th>入帳金額</th>
+        <th>備註</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
   <script>
-    document.getElementById('upload').addEventListener('change', function (e) {
+    document.getElementById('excelFile').addEventListener('change', function (e) {
       const file = e.target.files[0];
       if (!file) return;
+
+      const fileName = file.name;
+      const match = fileName.match(/(\d{6})/); // 解析 250718 格式
+      let reportDate = '';
+
+      if (match) {
+        const rawDate = match[1];
+        const year = '20' + rawDate.substring(0, 2);
+        const month = rawDate.substring(2, 4);
+        const day = rawDate.substring(4, 6);
+        reportDate = `${year}-${month}-${day}`;
+      } else {
+        alert("無法從檔名解析日期，請確認檔名格式為 250718日報表.xlsx");
+        return;
+      }
 
       const reader = new FileReader();
       reader.onload = function (e) {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-        // 顯示日期（依檔案名稱解析）
-        const fileName = file.name;
-        const match = fileName.match(/^(\d{2})(\d{2})(\d{2})/);
-        if (match) {
-          const year = '20' + match[1];
-          const month = match[2];
-          const day = match[3];
-          const fullDate = `${year}/${month}/${day}`;
-          document.getElementById('dateDisplay').textContent = `檔案日期：${fullDate}`;
-        } else {
-          document.getElementById('dateDisplay').textContent = '無法從檔名辨識日期';
-        }
+        const tableBody = document.querySelector('#resultTable tbody');
+        tableBody.innerHTML = '';
 
-        // 顯示資料
-        const table = document.createElement('table');
-        json.forEach((row, i) => {
+        rows.slice(1).forEach(row => {
+          if (row.length === 0 || row.every(cell => cell === undefined)) return;
+
           const tr = document.createElement('tr');
-          row.forEach(cell => {
-            const cellElement = document.createElement(i === 0 ? 'th' : 'td');
-            cellElement.textContent = cell !== undefined ? cell : '';
-            tr.appendChild(cellElement);
+          const rowData = [reportDate, ...row.slice(0, 7)];
+          rowData.forEach(cell => {
+            const td = document.createElement('td');
+            td.textContent = cell || '';
+            tr.appendChild(td);
           });
-          table.appendChild(tr);
+          tableBody.appendChild(tr);
         });
-
-        const container = document.getElementById('excelData');
-        container.innerHTML = '';
-        container.appendChild(table);
       };
-
       reader.readAsArrayBuffer(file);
     });
   </script>
