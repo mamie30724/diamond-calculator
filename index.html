@@ -82,27 +82,43 @@
       function formatExcelTime(value) {
         if (typeof value === "number") {
           let date = XLSX.SSF.parse_date_code(value);
-          return ${date.y}-${String(date.m).padStart(2, "0")}-${String(
+          return `${date.y}-${String(date.m).padStart(2, "0")}-${String(
             date.d
-          ).padStart(2, "0")};
+          ).padStart(2, "0")}`;
         }
         return value || "";
       }
 
+      function getDateFromFilename(filename) {
+        const match = filename.match(/^(\d{2})(\d{2})(\d{2})/);
+        if (!match) return "";
+        const year = "20" + match[1];
+        const month = match[2];
+        const day = match[3];
+        return `${year}-${month}-${day}`;
+      }
+
       function handleFile(e) {
         const file = e.target.files[0];
+        const fallbackDate = getDateFromFilename(file.name);
         const reader = new FileReader();
+
         reader.onload = function (event) {
           const data = new Uint8Array(event.target.result);
           const workbook = XLSX.read(data, { type: "array" });
           const sheet = workbook.Sheets[workbook.SheetNames[0]];
           const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
           allData = [];
           for (let i = 6; i < rows.length; i++) {
             const row = rows[i];
             if (!row[1]) continue;
+
+            let rawDate = formatExcelTime(row[1]);
+            const date = rawDate !== "" ? rawDate : fallbackDate;
+
             allData.push({
-              date: formatExcelTime(row[1]),
+              date: date,
               agent: row[2] || "",
               idName: row[3] || "",
               diamond: row[5] || 0,
@@ -112,8 +128,10 @@
               note: row[9] || "",
             });
           }
+
           renderSeparateStats();
         };
+
         reader.readAsArrayBuffer(file);
       }
 
@@ -140,20 +158,20 @@
 
         let html = "";
         for (const method in grouped) {
-          html += <div class="group-title">入帳方式：${method}</div>;
-          html += <table><thead><tr><th>日期</th><th>業務員</th><th>ID/名字</th><th>鑽石</th><th>末碼</th><th>金額</th><th>備註</th></tr></thead><tbody>;
+          html += `<div class="group-title">入帳方式：${method}</div>`;
+          html += `<table><thead><tr><th>日期</th><th>業務員</th><th>ID/名字</th><th>鑽石</th><th>末碼</th><th>金額</th><th>備註</th></tr></thead><tbody>`;
 
           let sumAmt = 0;
           let sumDiamond = 0;
 
           grouped[method].forEach((item) => {
-            html += <tr><td>${item.date}</td><td>${item.agent}</td><td>${item.idName}</td><td>${item.diamond}</td><td>${item.lastCode}</td><td>${item.amount}</td><td>${item.note}</td></tr>;
+            html += `<tr><td>${item.date}</td><td>${item.agent}</td><td>${item.idName}</td><td>${item.diamond}</td><td>${item.lastCode}</td><td>${item.amount}</td><td>${item.note}</td></tr>`;
             sumAmt += Number(item.amount) || 0;
             sumDiamond += Number(item.diamond) || 0;
           });
 
-          html += <tr style="font-weight:bold; background:#fafafa;"><td colspan="3">小計</td><td>${sumDiamond.toLocaleString()}</td><td></td><td>${sumAmt.toLocaleString()}</td><td></td></tr>;
-          html += </tbody></table>;
+          html += `<tr style="font-weight:bold; background:#fafafa;"><td colspan="3">小計</td><td>${sumDiamond.toLocaleString()}</td><td></td><td>${sumAmt.toLocaleString()}</td><td></td></tr>`;
+          html += `</tbody></table>`;
         }
 
         document.getElementById("content").innerHTML = html;
