@@ -1,181 +1,68 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Excel 上傳與分頁查詢</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <style>
-      body {
-        font-family: Arial, sans-serif;
-        margin: 1em;
-      }
-      #tabs {
-        margin-top: 1em;
-        border-bottom: 2px solid #444;
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-      }
-      .tab {
-        padding: 8px 16px;
-        cursor: pointer;
-        border: 1px solid #aaa;
-        border-bottom: none;
-        background: #eee;
-        user-select: none;
-        white-space: nowrap;
-      }
-      .tab.active {
-        background: white;
-        border-color: #444 #444 white;
-        font-weight: bold;
-      }
-      .group-title {
-        margin: 20px 0 6px 0;
-        font-weight: bold;
-        font-size: 1.1em;
-        border-bottom: 1px solid #ccc;
-        padding-bottom: 4px;
-      }
-      table {
-        border-collapse: collapse;
-        width: 100%;
-        margin-bottom: 20px;
-      }
-      th,
-      td {
-        border: 1px solid #aaa;
-        padding: 6px 10px;
-        text-align: center;
-      }
-      th {
-        background-color: #f0f0f0;
-      }
-      .summary {
-        margin-top: 10px;
-        font-weight: bold;
-      }
-      #filters {
-        margin: 10px 0;
-      }
-    </style>
-  </head>
-  <body>
-    <h2>Excel 上傳 - 查詢與統計</h2>
-    <input type="file" id="upload" accept=".xlsx, .xls" />
+<head>
+  <meta charset="UTF-8" />
+  <title>Excel 檔案預覽</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #999; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; }
+    #dateDisplay { font-size: 18px; margin-top: 10px; color: #333; }
+  </style>
+</head>
+<body>
+  <h2>上傳 Excel 並預覽內容</h2>
+  <input type="file" id="upload" accept=".xlsx" />
+  <div id="dateDisplay"></div>
+  <div id="excelData"></div>
 
-    <div id="filters">
-      <label>入帳方式：<input type="text" id="filterMethod" /></label>
-      <label>日期關鍵字：<input type="text" id="filterDate" /></label>
-      <button onclick="renderSeparateStats()">查詢</button>
-    </div>
+  <script>
+    document.getElementById('upload').addEventListener('change', function (e) {
+      const file = e.target.files[0];
+      if (!file) return;
 
-    <div id="tabs"></div>
-    <div id="summaryTop" class="summary"></div>
-    <div id="content"></div>
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-    <script>
-      let allData = [];
-
-      document.getElementById("upload").addEventListener("change", handleFile);
-
-      function formatExcelTime(value) {
-        if (typeof value === "number") {
-          let date = XLSX.SSF.parse_date_code(value);
-          return `${date.y}-${String(date.m).padStart(2, "0")}-${String(
-            date.d
-          ).padStart(2, "0")}`;
+        // 顯示日期（依檔案名稱解析）
+        const fileName = file.name;
+        const match = fileName.match(/^(\d{2})(\d{2})(\d{2})/);
+        if (match) {
+          const year = '20' + match[1];
+          const month = match[2];
+          const day = match[3];
+          const fullDate = `${year}/${month}/${day}`;
+          document.getElementById('dateDisplay').textContent = `檔案日期：${fullDate}`;
+        } else {
+          document.getElementById('dateDisplay').textContent = '無法從檔名辨識日期';
         }
-        return value || "";
-      }
 
-      function getDateFromFilename(filename) {
-        const match = filename.match(/^(\d{2})(\d{2})(\d{2})/);
-        if (!match) return "";
-        const year = "20" + match[1];
-        const month = match[2];
-        const day = match[3];
-        return `${year}-${month}-${day}`;
-      }
-
-      function handleFile(e) {
-        const file = e.target.files[0];
-        const fallbackDate = getDateFromFilename(file.name);
-        const reader = new FileReader();
-
-        reader.onload = function (event) {
-          const data = new Uint8Array(event.target.result);
-          const workbook = XLSX.read(data, { type: "array" });
-          const sheet = workbook.Sheets[workbook.SheetNames[0]];
-          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-
-          allData = [];
-          for (let i = 6; i < rows.length; i++) {
-            const row = rows[i];
-            if (!row[1]) continue;
-
-            let rawDate = formatExcelTime(row[1]);
-            const date = rawDate !== "" ? rawDate : fallbackDate;
-
-            allData.push({
-              date: date,
-              agent: row[2] || "",
-              idName: row[3] || "",
-              diamond: row[5] || 0,
-              method: row[6] || "無入帳方式",
-              lastCode: row[7] || "",
-              amount: row[8] || 0,
-              note: row[9] || "",
-            });
-          }
-
-          renderSeparateStats();
-        };
-
-        reader.readAsArrayBuffer(file);
-      }
-
-      function renderSeparateStats() {
-        const methodFilter = document
-          .getElementById("filterMethod")
-          .value.trim();
-        const dateFilter = document.getElementById("filterDate").value.trim();
-
-        const filtered = allData.filter((item) => {
-          const matchesMethod =
-            methodFilter === "" || item.method.includes(methodFilter);
-          const matchesDate =
-            dateFilter === "" || item.date.includes(dateFilter);
-          return matchesMethod && matchesDate;
-        });
-
-        const grouped = {};
-        filtered.forEach((item) => {
-          const key = item.method || "無入帳方式";
-          if (!grouped[key]) grouped[key] = [];
-          grouped[key].push(item);
-        });
-
-        let html = "";
-        for (const method in grouped) {
-          html += `<div class="group-title">入帳方式：${method}</div>`;
-          html += `<table><thead><tr><th>日期</th><th>業務員</th><th>ID/名字</th><th>鑽石</th><th>末碼</th><th>金額</th><th>備註</th></tr></thead><tbody>`;
-
-          let sumAmt = 0;
-          let sumDiamond = 0;
-
-          grouped[method].forEach((item) => {
-            html += `<tr><td>${item.date}</td><td>${item.agent}</td><td>${item.idName}</td><td>${item.diamond}</td><td>${item.lastCode}</td><td>${item.amount}</td><td>${item.note}</td></tr>`;
-            sumAmt += Number(item.amount) || 0;
-            sumDiamond += Number(item.diamond) || 0;
+        // 顯示資料
+        const table = document.createElement('table');
+        json.forEach((row, i) => {
+          const tr = document.createElement('tr');
+          row.forEach(cell => {
+            const cellElement = document.createElement(i === 0 ? 'th' : 'td');
+            cellElement.textContent = cell !== undefined ? cell : '';
+            tr.appendChild(cellElement);
           });
+          table.appendChild(tr);
+        });
 
-          html += `<tr style="font-weight:bold; background:#fafafa;"><td colspan="3">小計</td><td>${sumDiamond.toLocaleString()}</td><td></td><td>${sumAmt.toLocaleString()}</td><td></td></tr>`;
-          html += `</tbody></table>`;
-        }
+        const container = document.getElementById('excelData');
+        container.innerHTML = '';
+        container.appendChild(table);
+      };
 
-        document.getElementById("content").innerHTML = html;
-      }
-    </script>
-  </body>
+      reader.readAsArrayBuffer(file);
+    });
+  </script>
+</body>
 </html>
