@@ -1,82 +1,343 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
-<head>
-  <meta charset="UTF-8">
-  <title>匯入日報表資料</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <style>
-    body { font-family: sans-serif; padding: 20px; }
-    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-    th { background-color: #f0f0f0; }
-  </style>
-</head>
-<body>
-  <h2>上傳 Excel 檔案並解析日期</h2>
-  <input type="file" id="excelFile" accept=".xlsx" />
+  <head>
+    <meta charset="UTF-8" />
+    <title>Excel 分頁+業務分組+統計小記+分開統計頁</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 1em;
+      }
+      #tabs {
+        margin-top: 1em;
+        border-bottom: 2px solid #444;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .tab {
+        padding: 8px 16px;
+        cursor: pointer;
+        border: 1px solid #aaa;
+        border-bottom: none;
+        background: #eee;
+        user-select: none;
+        white-space: nowrap;
+      }
+      .tab.active {
+        background: white;
+        border-color: #444 #444 white;
+        font-weight: bold;
+      }
+      .group-title {
+        margin: 20px 0 6px 0;
+        font-weight: bold;
+        font-size: 1.1em;
+        border-bottom: 1px solid #ccc;
+        padding-bottom: 4px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-bottom: 20px;
+      }
+      th,
+      td {
+        border: 1px solid #aaa;
+        padding: 6px 10px;
+        text-align: center;
+      }
+      th {
+        background-color: #f0f0f0;
+      }
+      .summary {
+        margin-top: 10px;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Excel 上傳 - 分頁、業務分組、統計小記與分開統計</h2>
+    <input type="file" id="upload" accept=".xlsx, .xls" />
 
-  <table id="resultTable">
-    <thead>
-      <tr>
-        <th>時間</th>
-        <th>業務員</th>
-        <th>ID/名字</th>
-        <th>出款鑽石</th>
-        <th>入帳方式</th>
-        <th>入帳末碼</th>
-        <th>入帳金額</th>
-        <th>備註</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+    <div id="tabs"></div>
+    <div id="summaryTop" class="summary"></div>
+    <div id="content"></div>
 
-  <script>
-    document.getElementById('excelFile').addEventListener('change', function (e) {
-      const file = e.target.files[0];
-      if (!file) return;
+    <script>
+      function formatExcelTime(value) {
+        if (typeof value === "number") {
+          let totalSeconds = Math.round(value * 24 * 3600);
+          let hours = Math.floor(totalSeconds / 3600);
+          let minutes = Math.floor((totalSeconds % 3600) / 60);
+          let seconds = totalSeconds % 60;
 
-      const fileName = file.name;
-      const match = fileName.match(/(\d{6})/); // 解析 250718 格式
-      let reportDate = '';
+          const ampm = hours >= 12 ? "PM" : "AM";
+          hours = hours % 12;
+          if (hours === 0) hours = 12;
 
-      if (match) {
-        const rawDate = match[1];
-        const year = '20' + rawDate.substring(0, 2);
-        const month = rawDate.substring(2, 4);
-        const day = rawDate.substring(4, 6);
-        reportDate = `${year}-${month}-${day}`;
-      } else {
-        alert("無法從檔名解析日期，請確認檔名格式為 250718日報表.xlsx");
-        return;
+          return (
+            (hours < 10 ? "0" + hours : hours) +
+            ":" +
+            (minutes < 10 ? "0" + minutes : minutes) +
+            ":" +
+            (seconds < 10 ? "0" + seconds : seconds) +
+            " " +
+            ampm
+          );
+        } else if (typeof value === "string") {
+          const parts = value.split(":");
+          if (parts.length === 3) {
+            let hour = parseInt(parts[0], 10);
+            const minute = parts[1].padStart(2, "0");
+            const second = parts[2].padStart(2, "0");
+            const ampm = hour >= 12 ? "PM" : "AM";
+            hour = hour % 12;
+            if (hour === 0) hour = 12;
+            return (
+              (hour < 10 ? "0" + hour : hour) +
+              ":" +
+              minute +
+              ":" +
+              second +
+              " " +
+              ampm
+            );
+          }
+          return value;
+        } else {
+          return value || "";
+        }
       }
 
-      const reader = new FileReader();
-      reader.onload = function (e) {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      const uploadInput = document.getElementById("upload");
+      const tabsDiv = document.getElementById("tabs");
+      const contentDiv = document.getElementById("content");
+      const summaryTop = document.getElementById("summaryTop");
 
-        const tableBody = document.querySelector('#resultTable tbody');
-        tableBody.innerHTML = '';
+      let allData = [];
+      let dataByMethod = {};
+      let currentTab = "全部明細";
 
-        rows.slice(1).forEach(row => {
-          if (row.length === 0 || row.every(cell => cell === undefined)) return;
+      uploadInput.addEventListener("change", handleFile, false);
 
-          const tr = document.createElement('tr');
-          const rowData = [reportDate, ...row.slice(0, 7)];
-          rowData.forEach(cell => {
-            const td = document.createElement('td');
-            td.textContent = cell || '';
-            tr.appendChild(td);
+      function handleFile(e) {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+
+        reader.onload = function (event) {
+          const data = new Uint8Array(event.target.result);
+          const workbook = XLSX.read(data, { type: "array" });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+          allData = [];
+          dataByMethod = {};
+          tabsDiv.innerHTML = "";
+          contentDiv.innerHTML = "";
+          summaryTop.innerHTML = "";
+
+          for (let i = 6; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row[1]) continue;
+
+            const item = {
+              time: formatExcelTime(row[1]),
+              agent: row[2] || "",
+              idName: row[3] || "",
+              diamond: row[5] || "",
+              method: row[6] || "無入帳方式",
+              lastCode: row[7] || "",
+              amount: row[8] || "",
+              note: row[9] || "",
+            };
+
+            allData.push(item);
+
+            if (!dataByMethod[item.method]) dataByMethod[item.method] = [];
+            dataByMethod[item.method].push(item);
+          }
+
+          // 新增「分開統計」分頁名稱
+          const tabNames = [
+            "全部明細",
+            ...Object.keys(dataByMethod),
+            "分開統計",
+          ];
+          tabNames.forEach((name) => {
+            const tab = document.createElement("div");
+            tab.className = "tab";
+            tab.textContent = name;
+            tab.dataset.name = name;
+            tab.onclick = () => {
+              if (currentTab === name) return;
+              currentTab = name;
+              updateTabs();
+              renderContent();
+            };
+            tabsDiv.appendChild(tab);
           });
-          tableBody.appendChild(tr);
+
+          currentTab = "全部明細";
+          updateTabs();
+          renderContent();
+        };
+
+        reader.readAsArrayBuffer(file);
+      }
+
+      function updateTabs() {
+        Array.from(tabsDiv.children).forEach((tab) => {
+          tab.classList.toggle("active", tab.dataset.name === currentTab);
         });
-      };
-      reader.readAsArrayBuffer(file);
-    });
-  </script>
-</body>
+      }
+
+      function calcTotals(data) {
+        let totalAmount = 0;
+        let totalDiamond = 0;
+
+        data.forEach((item) => {
+          const amountNum = Number(item.amount) || 0;
+          const diamondNum = Number(item.diamond) || 0;
+          totalAmount += amountNum;
+          totalDiamond += diamondNum;
+        });
+
+        return { totalAmount, totalDiamond };
+      }
+
+      function renderContent() {
+        if (currentTab === "分開統計") {
+          renderSeparateStats();
+          return;
+        }
+
+        let dataToShow;
+        if (currentTab === "全部明細") {
+          dataToShow = allData;
+        } else {
+          dataToShow = dataByMethod[currentTab] || [];
+        }
+
+        if (dataToShow.length === 0) {
+          summaryTop.innerHTML = "";
+          contentDiv.innerHTML = "<p>沒有資料</p>";
+          return;
+        }
+
+        const totals = calcTotals(dataToShow);
+        summaryTop.innerHTML = `【${currentTab}】總入帳金額：${totals.totalAmount.toLocaleString()}，總出鑽數：${totals.totalDiamond.toLocaleString()}`;
+
+        // 依業務員分組
+        const groupByAgent = {};
+        dataToShow.forEach((item) => {
+          const key = item.agent || "無業務員";
+          if (!groupByAgent[key]) groupByAgent[key] = [];
+          groupByAgent[key].push(item);
+        });
+
+        let html = "";
+        for (const agent in groupByAgent) {
+          html += `<div class="group-title">業務員：${agent}</div>`;
+          html +=
+            "<table><thead><tr>" +
+            "<th>時間</th><th>業務員</th><th>ID/名字</th><th>出款鑽石</th>" +
+            "<th>入帳方式</th><th>入帳末碼</th><th>入帳金額</th><th>備註</th>" +
+            "</tr></thead><tbody>";
+
+          let agentAmountSum = 0;
+          let agentDiamondSum = 0;
+
+          groupByAgent[agent].forEach((item) => {
+            html +=
+              "<tr>" +
+              `<td>${item.time}</td>` +
+              `<td>${item.agent}</td>` +
+              `<td>${item.idName}</td>` +
+              `<td>${item.diamond}</td>` +
+              `<td>${item.method}</td>` +
+              `<td>${item.lastCode}</td>` +
+              `<td>${item.amount}</td>` +
+              `<td>${item.note}</td>` +
+              "</tr>";
+
+            agentAmountSum += Number(item.amount) || 0;
+            agentDiamondSum += Number(item.diamond) || 0;
+          });
+
+          // 加小計列
+          html +=
+            '<tr style="font-weight:bold; background:#fafafa;">' +
+            `<td colspan="3">小計</td>` +
+            `<td>${agentDiamondSum.toLocaleString()}</td>` +
+            `<td></td><td></td>` +
+            `<td>${agentAmountSum.toLocaleString()}</td>` +
+            `<td></td>` +
+            "</tr>";
+
+          html += "</tbody></table>";
+        }
+
+        summaryTop.style.display = "block";
+
+        contentDiv.innerHTML = html;
+      }
+
+      function renderSeparateStats() {
+        summaryTop.style.display = "block";
+
+        // 入帳方式加總入帳金額
+        const amountByMethod = {};
+        // 業務員加總出鑽數
+        const diamondByAgent = {};
+
+        let totalAmount = 0;
+        let totalDiamond = 0;
+
+        allData.forEach((item) => {
+          const method = item.method || "無入帳方式";
+          const agent = item.agent || "無業務員";
+
+          const amountNum = Number(item.amount) || 0;
+          const diamondNum = Number(item.diamond) || 0;
+
+          if (!amountByMethod[method]) amountByMethod[method] = 0;
+          amountByMethod[method] += amountNum;
+
+          if (!diamondByAgent[agent]) diamondByAgent[agent] = 0;
+          diamondByAgent[agent] += diamondNum;
+
+          totalAmount += amountNum;
+          totalDiamond += diamondNum;
+        });
+
+        summaryTop.innerHTML = `【分開統計】總入帳金額：${totalAmount.toLocaleString()}，總出鑽數：${totalDiamond.toLocaleString()}`;
+
+        // 入帳方式加總表格
+        let html = "<h3>入帳方式總入帳金額</h3>";
+        html +=
+          "<table><thead><tr><th>入帳方式</th><th>總入帳金額</th></tr></thead><tbody>";
+        for (const method in amountByMethod) {
+          html += `<tr><td>${method}</td><td>${amountByMethod[
+            method
+          ].toLocaleString()}</td></tr>`;
+        }
+        html += "</tbody></table>";
+
+        // 業務員加總出鑽數表格
+        html += "<h3>業務員總出鑽數量</h3>";
+        html +=
+          "<table><thead><tr><th>業務員</th><th>總出鑽數</th></tr></thead><tbody>";
+        for (const agent in diamondByAgent) {
+          html += `<tr><td>${agent}</td><td>${diamondByAgent[
+            agent
+          ].toLocaleString()}</td></tr>`;
+        }
+        html += "</tbody></table>";
+
+        contentDiv.innerHTML = html;
+      }
+    </script>
+  </body>
 </html>
